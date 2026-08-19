@@ -22,19 +22,22 @@ async function sign(s3, bucket, path, method) {
 function parseAuthorization(req) {
   const auth = req.headers.get("Authorization");
   if (!auth) {
-    throw new Response(null, { status: 401 });
+    return new Response(null, {
+      status: 401,
+      headers: { "WWW-Authenticate": 'Basic realm="Git LFS"' },
+    });
   }
 
   const [scheme, encoded] = auth.split(" ");
   if (scheme !== "Basic" || !encoded) {
-    throw new Response(null, { status: 400 });
+    return new Response(null, { status: 400 });
   }
 
   const buffer = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
   const decoded = new TextDecoder().decode(buffer);
   const index = decoded.indexOf(":");
   if (index === -1) {
-    throw new Response(null, { status: 400 });
+    return new Response(null, { status: 400 });
   }
 
   return { user: decoded.slice(0, index), pass: decoded.slice(index + 1) };
@@ -65,7 +68,11 @@ async function fetch(req, env) {
     return new Response(null, { status: 406 });
   }*/
 
-  const { user, pass } = parseAuthorization(req);
+  const authorization = parseAuthorization(req);
+  if (authorization instanceof Response) {
+    return authorization;
+  }
+  const { user, pass } = authorization;
   let s3Options = { accessKeyId: user, secretAccessKey: pass };
 
   const segments = url.pathname.split("/").slice(1, -2);
